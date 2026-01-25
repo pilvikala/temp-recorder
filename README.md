@@ -307,6 +307,18 @@ pulumi destroy
 - If using API key: Verify the API key is correct and included in the request
 - If using IAM: Ensure the caller has `roles/cloudfunctions.invoker` permission
 - Check that authentication is properly configured
+- **If the function requires authentication but you want public access**: The IAM binding might not have been applied. Try:
+  1. Run `pulumi up` again to ensure the IAM binding is created
+  2. Or grant public access manually using gcloud (for Cloud Functions v2):
+     ```bash
+     FUNCTION_NAME=$(pulumi stack output function_name)
+     REGION=$(pulumi config get region || echo "us-central1")
+     gcloud run services add-iam-policy-binding $FUNCTION_NAME \
+       --region=$REGION \
+       --member="allUsers" \
+       --role="roles/run.invoker"
+     ```
+     Note: Cloud Functions v2 uses Cloud Run under the hood, so we use `gcloud run services` instead of `gcloud functions`
 
 ## License
 
