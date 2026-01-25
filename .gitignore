@@ -1,0 +1,25 @@
+# Pulumi
+.pulumi/
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pulumi stack files (keep Pulumi.yaml, ignore stack-specific configs)
+Pulumi.*.yaml
+!Pulumi.yaml

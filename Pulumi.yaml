@@ -1,0 +1,3 @@
+name: temp-recorder
+runtime: python
+description: Temperature and humidity recorder using Google Cloud Functions and Firestore

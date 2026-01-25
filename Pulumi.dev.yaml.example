@@ -1,0 +1,6 @@
+config:
+  gcp:project: your-project-id
+  temp-recorder:projectId: your-project-id
+  temp-recorder:region: us-central1
+  # Optional: Custom Firestore connection string
+  # temp-recorder:firestoreConnection: your-custom-connection-string
