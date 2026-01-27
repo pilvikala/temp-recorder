@@ -136,7 +136,7 @@ def record_reading(request):
     try:
         # Create document in Firestore
         # Collection structure: readings/{sensorID}_{timestamp}
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(datetime.UTC)
         doc_id = f"{sensor_id}_{timestamp.isoformat()}"
         
         doc_ref = db.collection('readings').document(doc_id)

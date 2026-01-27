@@ -118,6 +118,21 @@ firestore_user = gcp.projects.IAMMember(
     member=pulumi.Output.from_input(f"serviceAccount:{default_service_account_email}"),
 )
 
+firestore_reader_service_account = gcp.serviceaccount.Account(
+    "firestore-reader-sa",
+    account_id="firestore-reader-sa",
+    display_name="Firestore Reader Service Account",
+    project=project_id,
+)
+
+# Grant the service account permission to read from Firestore
+firestore_reader = gcp.projects.IAMMember(
+    "firestore-reader",
+    project=project_id,
+    role="roles/datastore.user",
+    member=firestore_reader_service_account.email.apply(lambda email: f"serviceAccount:{email}"),
+)
+
 # Export the function URL
 # For v2 functions, the URL is in the service config
 pulumi.export("function_url", function.service_config.apply(lambda sc: sc.uri if sc else ""))
