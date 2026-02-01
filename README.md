@@ -6,6 +6,7 @@ A Google Cloud Function that records temperature and humidity sensor readings to
 
 - HTTP-triggered Cloud Function (GET requests)
 - Stores sensor readings in Firestore
+- **Get last recorded temperature** (separate endpoint)
 - Validates input parameters
 - **Multiple authentication options** (API Key or Google Cloud IAM)
 - Infrastructure as Code with Pulumi
@@ -98,16 +99,17 @@ pulumi up
 
 This will:
 - Create a storage bucket for function source code
-- Package and upload the Cloud Function
-- Deploy the function with proper IAM permissions
-- Output the function URL
+- Package and upload the Cloud Functions
+- Deploy the functions with proper IAM permissions
+- Output the function URLs
 
-### Get the Function URL
+### Get the Function URLs
 
-After deployment, the function URL will be displayed in the output. You can also retrieve it with:
+After deployment, the function URLs will be displayed in the output. You can also retrieve them with:
 
 ```bash
 pulumi stack output function_url
+pulumi stack output last_temperature_function_url
 ```
 
 ## Authentication
@@ -221,6 +223,64 @@ gcloud auth print-identity-token | xargs -I {} curl \
   "message": "Authentication required. Provide apiKey parameter or X-API-Key header."
 }
 ```
+
+### Getting the last recorded temperature
+
+A separate Cloud Function returns the most recent temperature reading from Firestore. Use the same authentication as for recording (API key or IAM).
+
+**URL:** `pulumi stack output last_temperature_function_url`
+
+**Request:** GET (no required parameters). Optional: `apiKey` query param or `X-API-Key` header if using API key auth.
+
+**Example Request (with API key):**
+
+```bash
+curl "https://LAST-TEMPERATURE-FUNCTION-URL?apiKey=your-api-key"
+```
+
+**Example Request (with IAM auth):**
+
+```bash
+gcloud auth print-identity-token | xargs -I {} curl \
+  -H "Authorization: Bearer {}" "https://LAST-TEMPERATURE-FUNCTION-URL"
+```
+
+**Example Response (Success with data):**
+
+```json
+{
+  "status": "success",
+  "message": "Last temperature reading",
+  "data": {
+    "measure": "temperature",
+    "sensorID": "sensor-001",
+    "value": 23.5,
+    "timestamp": "2024-01-15T10:30:00.123456",
+    "document_id": "sensor-001_2024-01-15T10:30:00.123456"
+  }
+}
+```
+
+**Example Response (Success, no readings):**
+
+```json
+{
+  "status": "success",
+  "message": "No temperature readings found",
+  "data": null
+}
+```
+
+**Example Response (Error):**
+
+```json
+{
+  "status": "error",
+  "message": "Failed to get last temperature: ..."
+}
+```
+
+**Note (Firestore index):** The last-temperature query uses a composite index on the `readings` collection. Index creation is asynchronous; on first deployment the new function may return index-related errors for a few minutes until the index is built. Wait and retry if you see such errors.
 
 ### Firestore Structure
 

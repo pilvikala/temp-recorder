@@ -37,11 +37,24 @@ default_service_account_email = f"{project_id}@appspot.gserviceaccount.com"
 # Note: Firestore database creation is a one-time operation per project
 # If the database already exists, this will be a no-op
 firestore_database = gcp.firestore.Database(
-    "temp-recorder-database",
+    "temp-recorder-db",
     project=project_id,
     location_id=region,  # Use the same region as the function
     type="FIRESTORE_NATIVE",  # Use Firestore Native mode (recommended)
-    name="(default)",  # Use the default database name
+    name="temp-recorder-db",  # Use the default database name
+)
+
+# Composite index for "last temperature" query (measure == 'temperature' order by timestamp desc).
+# Index creation is asynchronous; the get_last_temperature function may fail until the index is built.
+readings_last_temperature_index = gcp.firestore.Index(
+    "readings-last-temperature-index",
+    project=project_id,
+    database=firestore_database.name,
+    collection="readings",
+    fields=[
+        gcp.firestore.IndexFieldArgs(field_path="measure", order="ASCENDING"),
+        gcp.firestore.IndexFieldArgs(field_path="timestamp", order="DESCENDING"),
+    ],
 )
 
 # Create the Cloud Function (using v2 API for HTTP triggers)
@@ -101,6 +114,44 @@ invoker = gcp.cloudfunctionsv2.FunctionIamMember(
     member="allUsers",
 )
 
+# Create the "last temperature" Cloud Function (same source, different entry point)
+last_temperature_function = gcp.cloudfunctionsv2.Function(
+    "last-temperature-function",
+    location=region,
+    project=project_id,
+    build_config=gcp.cloudfunctionsv2.FunctionBuildConfigArgs(
+        runtime="python311",
+        entry_point="get_last_temperature",
+        source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceArgs(
+            storage_source=gcp.cloudfunctionsv2.FunctionBuildConfigSourceStorageSourceArgs(
+                bucket=bucket.name,
+                object=source_archive.name,
+            ),
+        ),
+    ),
+    service_config=gcp.cloudfunctionsv2.FunctionServiceConfigArgs(
+        available_memory="256M",
+        timeout_seconds=60,
+        environment_variables=pulumi.Output.all(api_key).apply(
+            lambda args: {
+                "FIRESTORE_CONNECTION": firestore_connection,
+                "GOOGLE_CLOUD_PROJECT": project_id,
+                **({"API_KEY": args[0]} if args[0] else {}),
+            }
+        ),
+        service_account_email=default_service_account_email,
+    ),
+)
+
+last_temperature_invoker = gcp.cloudfunctionsv2.FunctionIamMember(
+    "last-temperature-function-invoker",
+    project=last_temperature_function.project,
+    location=last_temperature_function.location,
+    cloud_function=last_temperature_function.name,
+    role="roles/cloudfunctions.invoker",
+    member="allUsers",
+)
+
 # Grant the Cloud Function permission to access Firestore
 # NOTE: This requires project-level IAM permissions. If you get a 403 error, you can:
 # 1. Grant the permission manually using gcloud:
@@ -133,9 +184,10 @@ firestore_reader = gcp.projects.IAMMember(
     member=firestore_reader_service_account.email.apply(lambda email: f"serviceAccount:{email}"),
 )
 
-# Export the function URL
+# Export the function URLs
 # For v2 functions, the URL is in the service config
 pulumi.export("function_url", function.service_config.apply(lambda sc: sc.uri if sc else ""))
 pulumi.export("function_name", function.name)
+pulumi.export("last_temperature_function_url", last_temperature_function.service_config.apply(lambda sc: sc.uri if sc else ""))
 pulumi.export("project_id", project_id)
 pulumi.export("firestore_database_name", firestore_database.name)

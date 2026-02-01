@@ -175,3 +175,78 @@ def record_reading(request):
             status=500,
             mimetype='application/json'
         )
+
+
+def get_last_temperature(request):
+    """
+    Cloud Function to return the last recorded temperature from Firestore.
+
+    Optional GET parameters:
+    - apiKey: API key for authentication (if API_KEY env var is set)
+
+    Alternatively, use X-API-Key header for API key authentication.
+
+    Returns:
+    - JSON response with status and data (last reading or null)
+    """
+    # Validate authentication
+    is_authorized, auth_error = validate_auth(request)
+    if not is_authorized:
+        return auth_error
+
+    try:
+        query = (
+            db.collection('readings')
+            .where('measure', '==', 'temperature')
+            .order_by('timestamp', direction=firestore.Query.DESCENDING)
+            .limit(1)
+        )
+        docs = list(query.stream())
+
+        if not docs:
+            response_data = {
+                'status': 'success',
+                'message': 'No temperature readings found',
+                'data': None
+            }
+            return Response(
+                json.dumps(response_data),
+                status=200,
+                mimetype='application/json'
+            )
+
+        doc = docs[0]
+        data = doc.to_dict()
+        timestamp = data.get('timestamp')
+        if hasattr(timestamp, 'isoformat'):
+            timestamp_str = timestamp.isoformat()
+        else:
+            timestamp_str = str(timestamp) if timestamp else None
+
+        response_data = {
+            'status': 'success',
+            'message': 'Last temperature reading',
+            'data': {
+                'measure': data.get('measure'),
+                'sensorID': data.get('sensorID'),
+                'value': data.get('value'),
+                'timestamp': timestamp_str,
+                'document_id': doc.id
+            }
+        }
+        return Response(
+            json.dumps(response_data),
+            status=200,
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        response_data = {
+            'status': 'error',
+            'message': f'Failed to get last temperature: {str(e)}'
+        }
+        return Response(
+            json.dumps(response_data),
+            status=500,
+            mimetype='application/json'
+        )

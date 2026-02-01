@@ -24,3 +24,4 @@ pulumi config set region $REGION
 pulumi up
 
 echo "Function URL: $(pulumi stack output function_url)"
+echo "Last temperature function URL: $(pulumi stack output last_temperature_function_url)"
