@@ -41,7 +41,7 @@ firestore_database = gcp.firestore.Database(
     project=project_id,
     location_id=region,  # Use the same region as the function
     type="FIRESTORE_NATIVE",  # Use Firestore Native mode (recommended)
-    name="temp-recorder-db",  # Use the default database name
+    name="(default)",  # Use the default database name
 )
 
 # Composite index for "last temperature" query (measure == 'temperature' order by timestamp desc).
@@ -150,6 +150,42 @@ last_temperature_invoker = gcp.cloudfunctionsv2.FunctionIamMember(
     cloud_function=last_temperature_function.name,
     role="roles/cloudfunctions.invoker",
     member="allUsers",
+)
+
+# Alert when the last-temperature function is not called for 30+ minutes (e.g. power socket script stopped).
+# Cloud Functions v2 use Cloud Run under the hood; we monitor run.googleapis.com/request_count.
+last_temperature_alert_filter = last_temperature_function.name.apply(
+    lambda n: f'metric.type="run.googleapis.com/request_count" AND resource.type="cloud_run_revision" AND resource.labels.service_name="{n.split("/")[-1]}"'
+)
+last_temperature_no_invocations_alert = gcp.monitoring.AlertPolicy(
+    "last-temperature-no-invocations-alert",
+    project=project_id,
+    display_name="Last temperature function not called for 30 minutes",
+    combiner="OR",
+    conditions=[
+        gcp.monitoring.AlertPolicyConditionArgs(
+            display_name="No requests to last-temperature function for 30 minutes",
+            condition_absent=gcp.monitoring.AlertPolicyConditionConditionAbsentArgs(
+                filter=last_temperature_alert_filter,
+                duration="1800s",
+                aggregations=[
+                    gcp.monitoring.AlertPolicyConditionConditionAbsentAggregationArgs(
+                        alignment_period="60s",
+                        per_series_aligner="ALIGN_COUNT",
+                    ),
+                ],
+            ),
+        ),
+    ],
+    severity="WARNING",
+    documentation=gcp.monitoring.AlertPolicyDocumentationArgs(
+        content="The get_last_temperature Cloud Function has not received any requests for at least 30 minutes. "
+        "This may indicate the power socket script (or other caller) stopped polling. Check the caller and consider turning the socket off as a fail-safe.",
+        mime_type="text/markdown",
+    ),
+    # Optional: set alertNotificationChannelId in Pulumi config to receive alerts (e.g. email).
+    # Value: full channel name, e.g. projects/PROJECT_ID/notificationChannels/CHANNEL_ID
+    notification_channels=[c for c in [config.get("alertNotificationChannelId")] if c],
 )
 
 # Grant the Cloud Function permission to access Firestore

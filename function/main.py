@@ -1,7 +1,7 @@
 import os
 import json
 from google.cloud import firestore
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Response
 
 # Initialize Firestore client
@@ -136,15 +136,15 @@ def record_reading(request):
     try:
         # Create document in Firestore
         # Collection structure: readings/{sensorID}_{timestamp}
-        timestamp = datetime.now(datetime.UTC)
+        timestamp = datetime.now(tz=timezone.utc)
         doc_id = f"{sensor_id}_{timestamp.isoformat()}"
         
         doc_ref = db.collection('readings').document(doc_id)
         doc_ref.set({
             'measure': measure.lower(),
             'sensorID': sensor_id,
+            'timestamp': timestamp.isoformat(),
             'value': value_float,
-            'timestamp': timestamp,
             'created_at': firestore.SERVER_TIMESTAMP
         })
         
